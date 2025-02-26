@@ -34,6 +34,8 @@ impl TcpStream {
         // we would first call nonblocking io in the coroutine
         // to avoid unnecessary context switch
         s.set_nonblocking(true)?;
+        // s.set_nodelay(true)?;
+
 
         io_impl::add_socket(&s).map(|io| TcpStream {
             _io: io,
@@ -375,6 +377,15 @@ impl TcpListener {
 
         // windows not have reuse port but reuse address is not safe
         listener.set_reuse_address(true)?;
+        // listener.set_nodelay(true)?;
+        listener.set_keepalive(true)?;
+
+        listener.set_tcp_keepalive(
+            &socket2::TcpKeepalive::new()
+                .with_time(std::time::Duration::from_secs(60))
+                .with_retries(9)
+                .with_interval(std::time::Duration::from_secs(30))
+        )?;
 
         #[cfg(unix)]
         listener.set_reuse_port(true)?;
@@ -383,7 +394,14 @@ impl TcpListener {
         // for addr in addrs {
         //     listener.bind(&addr.into())?;
         // }
-        listener.listen(1024)?;
+
+        // listener.listen(1024)?;
+
+        #[cfg(unix)]
+        listener.listen(libc::SOMAXCONN)?;
+
+        #[cfg(windows)]
+        listener.listen(winapi::um::winsock2::SOMAXCONN)?;
 
         let s = listener.into();
         TcpListener::new(s)
